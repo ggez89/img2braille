@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Braille Image Converter</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0e0e10;
+      color: #f5f5f5;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 30px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 95vw;
+      background: #1f1f23;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    h2 {
+      margin-top: 0;
+      font-weight: 600;
+      font-size: 1.6rem;
+      color: #fff;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    #drop {
+      border: 2px dashed #444;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      margin-bottom: 20px;
+      background: #2a2a2d;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    #drop:hover {
+      border-color: #9147ff;
+      background: #242427;
+    }
+
+    #controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+      min-height: 120px;
+    }
+
+    #controls label {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.9rem;
+      color: #ddd;
+      margin-bottom: 8px;
+    }
+
+    .inline-control {
+      display: flex;
+      flex-direction: row !important;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .inline-control input[type="checkbox"] {
+      margin-top: 0 !important;
+      margin-left: 8px;
+    }
+
+    input[type="number"],
+    select {
+      margin-top: 4px;
+      padding: 6px;
+      border-radius: 8px;
+      border: none;
+      background: #2d2d31;
+      color: #fff;
+    }
+
+    input[type="checkbox"] {
+      margin-top: 4px;
+      width: 16px;
+      height: 16px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    .resolution-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    #preview {
+      white-space: pre;
+      background: #000;
+      color: #fff;
+      padding: 16px;
+      overflow: auto;
+      max-height: 70vh;
+      width: 100%;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      font-family: "Courier New", monospace;
+      min-height: 400px;
+      box-sizing: border-box;
+      resize: both;
+      line-height: 1.0;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      flex: 1;
+      background: #9147ff;
+      border: none;
+      color: #fff;
+      padding: 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover {
+      background: #772ce8;
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+
+    #reset {
+      background: #666;
+      flex: 0 0 auto;
+      padding: 10px 16px;
+    }
+    #reset:hover {
+      background: #777;
+    }
+
+    #hiddenCanvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Braille Image Converter</h2>
+
+    <div id="drop">Drop an image here or click to upload</div>
+
+    <div id="controls">
+      <label>
+        Mode:
+        <select id="mode">
+          <option value="custom">Custom</option>
+          <option value="twitch">Twitch</option>
+        </select>
+      </label>
+
+      <label class="inline-control">
+        Invert
+        <input type="checkbox" id="invert">
+      </label>
+
+      <div id="resolutionControls">
+        <label id="customWidthLabel">
+          Width (chars):
+          <input type="number" id="width" value="80">
+        </label>
+        <div id="twitchResolution" style="display: none;">
+          <label>Twitch Resolution:</label>
+          <div class="resolution-controls">
+            <input type="number" id="twitchWidth" value="28" placeholder="Width">
+            <input type="number" id="twitchHeight" value="16" placeholder="Height">
+          </div>
+        </div>
+      </div>
+
+      <label id="aspectControl">
+        Aspect Ratio: <span id="aspectVal">1.75</span>
+        <input type="range" id="aspect" min="1.0" max="2.5" step="0.05" value="1.75">
+      </label>
+
+      <label class="inline-control">
+        Enable Dithering
+        <input type="checkbox" id="enableDither" checked>
+      </label>
+
+      <label id="ditherControl">
+        Dither Threshold: <span id="ditherVal">128</span>
+        <input type="range" id="dither" min="0" max="255" step="5" value="128">
+      </label>
+
+      <label class="inline-control">
+        Null Fix
+        <input type="checkbox" id="nullFix" checked>
+      </label>
+    </div>
+
+    <div id="preview"></div>
+
+    <div class="buttons">
+      <button id="copy">Copy to Clipboard</button>
+      <button id="saveTxt">Save as .txt</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+
+  <canvas id="hiddenCanvas"></canvas>
+
+  <script>
+    let imgElement = null;
+    let currentFileName = null;
+    
+    const defaultSettings = {
+      mode: 'custom',
+      width: 80,
+      twitchWidth: 28,
+      twitchHeight: 16,
+      invert: false,
+      aspect: 1.75,
+      enableDither: true,
+      dither: 128,
+      nullFix: true
+    };
+
+    function imageToGrayscale(img, targetWidth, targetHeight) {
+      const canvas = document.getElementById('hiddenCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      
+      // Draw and resize image
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      
+      // Get image data
+      const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+      const data = imageData.data;
+      
+      // Convert to grayscale
+      const grayscale = new Uint8Array(targetWidth * targetHeight);
+      
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        // Convert to grayscale using luminance formula
+        const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+        grayscale[i / 4] = gray;
+      }
+      
+      return grayscale;
+    }
+
+    function applyDithering(grayscale, width, height, threshold) {
+      const result = new Uint8Array(grayscale.length);
+      
+      if (threshold !== null) {
+        // Simple threshold dithering
+        for (let i = 0; i < grayscale.length; i++) {
+          result[i] = grayscale[i] > threshold ? 255 : 0;
+        }
+      } else {
+        // Floyd-Steinberg dithering
+        const temp = new Float32Array(grayscale);
+        
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = y * width + x;
+            const oldPixel = temp[idx];
+            const newPixel = oldPixel > 127 ? 255 : 0;
+            result[idx] = newPixel;
+            
+            const error = oldPixel - newPixel;
+            
+            // Distribute error to neighboring pixels
+            if (x + 1 < width) {
+              temp[idx + 1] += error * 7 / 16;
+            }
+            if (y + 1 < height) {
+              if (x > 0) {
+                temp[(y + 1) * width + (x - 1)] += error * 3 / 16;
+              }
+              temp[(y + 1) * width + x] += error * 5 / 16;
+              if (x + 1 < width) {
+                temp[(y + 1) * width + (x + 1)] += error * 1 / 16;
+              }
+            }
+          }
+        }
+      }
+      
+      return result;
+    }
+
+    function imageToBraille(img, options = {}) {
+      const {
+        mode = "custom",
+        width_chars = 80,
+        twitch_width_chars = 28,
+        twitch_height_lines = 16,
+        invert = false,
+        aspect_correction = 1.75,
+        dithering_level = null,
+        null_fix = false
+      } = options;
+
+      const braille_w = 2;
+      const braille_h = 4;
+      
+      let target_w_px, target_h_px;
+      
+      if (mode === "twitch") {
+        target_w_px = twitch_width_chars * braille_w;
+        target_h_px = twitch_height_lines * braille_h;
+      } else {
+        target_w_px = width_chars * braille_w;
+        const scale = target_w_px / img.naturalWidth;
+        target_h_px = Math.round(img.naturalHeight * scale * aspect_correction);
+      }
+      
+      // Convert image to grayscale
+      let grayscale = imageToGrayscale(img, target_w_px, target_h_px);
+      
+      // Apply dithering
+      const bw = applyDithering(grayscale, target_w_px, target_h_px, dithering_level);
+      
+      // Ensure dimensions are multiples of braille cell size
+      const width = target_w_px;
+      const height = target_h_px;
+      const pad_w = (braille_w - (width % braille_w)) % braille_w;
+      const pad_h = (braille_h - (height % braille_h)) % braille_h;
+      
+      let finalWidth = width + pad_w;
+      let finalHeight = height + pad_h;
+      
+      // Create padded array if needed
+      let paddedBw;
+      if (pad_w > 0 || pad_h > 0) {
+        paddedBw = new Uint8Array(finalWidth * finalHeight);
+        paddedBw.fill(0);
+        
+        // Copy original data
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            paddedBw[y * finalWidth + x] = bw[y * width + x];
+          }
+        }
+      } else {
+        paddedBw = bw;
+      }
+
+      // Braille Unicode dot pattern mapping
+      const DOT_MAP = [
+        [0x01, 0x08],  // row 0: dots 1,4
+        [0x02, 0x10],  // row 1: dots 2,5
+        [0x04, 0x20],  // row 2: dots 3,6
+        [0x40, 0x80],  // row 3: dots 7,8
+      ];
+
+      const lines = [];
+      
+      for (let y = 0; y < finalHeight; y += braille_h) {
+        const row = [];
+        
+        for (let x = 0; x < finalWidth; x += braille_w) {
+          let braille_bits = 0;
+          
+          // Check each position in the 2x4 braille cell
+          for (let dy = 0; dy < braille_h; dy++) {
+            for (let dx = 0; dx < braille_w; dx++) {
+              const px_x = x + dx;
+              const px_y = y + dy;
+              
+              if (px_x < finalWidth && px_y < finalHeight) {
+                const idx = px_y * finalWidth + px_x;
+                let pixel_on = paddedBw[idx] === 255;
+                
+                if (invert) {
+                  pixel_on = !pixel_on;
+                }
+                
+                if (pixel_on) {
+                  braille_bits |= DOT_MAP[dy][dx];
+                }
+              }
+            }
+          }
+          
+          // Convert to braille unicode character
+          let braille_char;
+          if (braille_bits === 0) {
+            if (null_fix) {
+              braille_char = '⠁';  // Braille with just dot 1 (U+2801)
+            } else {
+              braille_char = String.fromCharCode(0x2800);  // Empty braille character
+            }
+          } else {
+            braille_char = String.fromCharCode(0x2800 + braille_bits);
+          }
+          
+          row.push(braille_char);
+        }
+        
+        lines.push(row.join(''));
+      }
+
+      return lines.join('\n');
+    }
+
+    function render() {
+      if (!imgElement) return;
+      
+      const mode = document.getElementById("mode").value;
+      const width = parseInt(document.getElementById("width").value);
+      const twitchWidth = parseInt(document.getElementById("twitchWidth").value);
+      const twitchHeight = parseInt(document.getElementById("twitchHeight").value);
+      const invert = document.getElementById("invert").checked;
+      const aspect = parseFloat(document.getElementById("aspect").value);
+      const enableDither = document.getElementById("enableDither").checked;
+      const dither = enableDither ? parseInt(document.getElementById("dither").value) : null;
+      const nullFix = document.getElementById("nullFix").checked;
+
+      try {
+        const braille = imageToBraille(imgElement, {
+          mode,
+          width_chars: width,
+          twitch_width_chars: twitchWidth,
+          twitch_height_lines: twitchHeight,
+          invert,
+          aspect_correction: aspect,
+          dithering_level: dither,
+          null_fix: nullFix
+        });
+
+        document.getElementById("preview").textContent = braille;
+        autoScalePreviewFont();
+      } catch (err) {
+        console.error('Error converting image:', err);
+        document.getElementById("preview").textContent = "Error processing image. Please try a different image.";
+      }
+    }
+
+    function autoScalePreviewFont() {
+      const preview = document.getElementById("preview");
+      const mode = document.getElementById("mode").value;
+      
+      if (!preview.textContent.trim()) return;
+      
+      if (mode === "twitch") {
+        // Fixed 12pt font for Twitch mode (like Twitch chat)
+        preview.style.fontSize = "12pt";
+        return;
+      }
+      
+      // Custom mode: scale to fit the container optimally
+      const containerWidth = preview.clientWidth - 32; // Account for padding
+      const containerHeight = preview.clientHeight - 32;
+      
+      // Get the braille text dimensions
+      const lines = preview.textContent.split('\n');
+      const maxLineLength = Math.max(...lines.map(line => line.length));
+      const lineCount = lines.length;
+      
+      if (maxLineLength === 0 || lineCount === 0) return;
+      
+      // Calculate optimal font size based on available space
+      // Braille characters are roughly 0.6 times as wide as they are tall
+      const charWidthRatio = 0.6;
+      
+      // Calculate font size to fit width
+      const fontSizeForWidth = (containerWidth / maxLineLength) / charWidthRatio;
+      
+      // Calculate font size to fit height 
+      const fontSizeForHeight = containerHeight / lineCount;
+      
+      // Use the smaller of the two to ensure everything fits
+      let fontSize = Math.min(fontSizeForWidth, fontSizeForHeight);
+      
+      // Apply reasonable bounds
+      const minFontSize = 8;
+      const maxFontSize = 32;
+      fontSize = Math.max(minFontSize, Math.min(maxFontSize, fontSize));
+      
+      preview.style.fontSize = Math.floor(fontSize) + "px";
+    }
+
+    function updateModeVisibility() {
+      const mode = document.getElementById("mode").value;
+      
+      if (mode === "twitch") {
+        document.getElementById("customWidthLabel").style.display = "none";
+        document.getElementById("twitchResolution").style.display = "block";
+        document.getElementById("aspectControl").style.display = "none";
+      } else {
+        document.getElementById("customWidthLabel").style.display = "flex";
+        document.getElementById("twitchResolution").style.display = "none";
+        document.getElementById("aspectControl").style.display = "flex";
+      }
+    }
+
+    function updateDitherVisibility() {
+      const enableDither = document.getElementById("enableDither").checked;
+      
+      if (enableDither) {
+        document.getElementById("ditherControl").style.display = "flex";
+      } else {
+        document.getElementById("ditherControl").style.display = "none";
+      }
+    }
+
+    function resetToDefaults() {
+      document.getElementById("mode").value = defaultSettings.mode;
+      document.getElementById("width").value = defaultSettings.width;
+      document.getElementById("twitchWidth").value = defaultSettings.twitchWidth;
+      document.getElementById("twitchHeight").value = defaultSettings.twitchHeight;
+      document.getElementById("invert").checked = defaultSettings.invert;
+      document.getElementById("aspect").value = defaultSettings.aspect;
+      document.getElementById("aspectVal").innerText = defaultSettings.aspect;
+      document.getElementById("enableDither").checked = defaultSettings.enableDither;
+      document.getElementById("dither").value = defaultSettings.dither;
+      document.getElementById("ditherVal").innerText = defaultSettings.dither;
+      document.getElementById("nullFix").checked = defaultSettings.nullFix;
+      
+      updateModeVisibility();
+      updateDitherVisibility();
+      
+      if (typeof(Storage) !== "undefined") {
+        localStorage.removeItem("aspect");
+      }
+      
+      document.getElementById("preview").textContent = "";
+      imgElement = null;
+      currentFileName = null;
+    }
+
+    // File upload handlers
+    function handleFile(file) {
+      if (!file || !file.type.startsWith('image/')) {
+        alert('Please select a valid image file.');
+        return;
+      }
+      
+      currentFileName = file.name;
+      
+      const img = new Image();
+      img.onload = function() {
+        imgElement = img;
+        render();
+      };
+      img.onerror = function() {
+        alert('Failed to load image. Please try a different file.');
+      };
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Initialize all event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+      // Drag & Drop
+      const drop = document.getElementById("drop");
+      
+      drop.addEventListener('click', function() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.addEventListener('change', function(e) {
+          if (e.target.files[0]) {
+            handleFile(e.target.files[0]);
+          }
+        });
+        input.click();
+      });
+
+      drop.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.style.background = "#2d2d31";
+        drop.style.borderColor = "#9147ff";
+      });
+
+      drop.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.style.background = "#2a2a2d";
+        drop.style.borderColor = "#444";
+      });
+
+      drop.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.style.background = "#2a2a2d";
+        drop.style.borderColor = "#444";
+        if (e.dataTransfer.files[0]) {
+          handleFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Controls
+      document.getElementById("mode").addEventListener('change', function() {
+        updateModeVisibility();
+        render();
+      });
+
+      document.getElementById("width").addEventListener('input', render);
+      document.getElementById("twitchWidth").addEventListener('input', render);
+      document.getElementById("twitchHeight").addEventListener('input', render);
+      document.getElementById("invert").addEventListener('change', render);
+      document.getElementById("nullFix").addEventListener('change', render);
+      
+      document.getElementById("aspect").addEventListener('input', function(e) {
+        document.getElementById("aspectVal").innerText = e.target.value;
+        if (typeof(Storage) !== "undefined") {
+          localStorage.setItem("aspect", e.target.value);
+        }
+        render();
+      });
+
+      document.getElementById("enableDither").addEventListener('change', function() {
+        updateDitherVisibility();
+        render();
+      });
+
+      document.getElementById("dither").addEventListener('input', function(e) {
+        document.getElementById("ditherVal").innerText = e.target.value;
+        render();
+      });
+
+      // Buttons
+      document.getElementById("reset").addEventListener('click', resetToDefaults);
+
+      document.getElementById("copy").addEventListener('click', function() {
+        const text = document.getElementById("preview").textContent;
+        if (text.trim()) {
+          navigator.clipboard.writeText(text).then(function() {
+            const btn = document.getElementById("copy");
+            const originalText = btn.textContent;
+            btn.textContent = "Copied!";
+            setTimeout(function() {
+              btn.textContent = originalText;
+            }, 1500);
+          }).catch(function() {
+            // Fallback for older browsers
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+          });
+        }
+      });
+
+      document.getElementById("saveTxt").addEventListener('click', function() {
+        const text = document.getElementById("preview").textContent;
+        if (text.trim()) {
+          let filename = "braille.txt";
+          if (currentFileName) {
+            const baseName = currentFileName.replace(/\.[^/.]+$/, "");
+            filename = baseName + ".txt";
+          }
+          
+          const blob = new Blob([text], {type: "text/plain"});
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          a.click();
+        }
+      });
+
+      // Window resize
+      let resizeTimeout;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+          if (document.getElementById("preview").textContent.trim()) {
+            autoScalePreviewFont();
+          }
+        }, 150);
+      });
+
+      // Restore aspect from localStorage
+      if (typeof(Storage) !== "undefined") {
+        const savedAspect = localStorage.getItem("aspect");
+        if (savedAspect) {
+          document.getElementById("aspect").value = savedAspect;
+          document.getElementById("aspectVal").innerText = savedAspect;
+        }
+      }
+
+      // Initialize visibility
+      updateModeVisibility();
+      updateDitherVisibility();
+    });
+  </script>
+</body>
+</html>
