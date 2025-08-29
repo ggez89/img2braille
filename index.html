@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Braille Image Converter</title>
+  <title>Image to Braille</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -53,7 +53,7 @@
       grid-template-columns: 1fr 1fr;
       gap: 16px;
       margin-bottom: 20px;
-      min-height: 120px;
+      min-height: 200px;
     }
 
     #controls label {
@@ -69,6 +69,7 @@
       flex-direction: row !important;
       align-items: center;
       gap: 8px;
+      margin-bottom: 4px;
     }
 
     .inline-control input[type="checkbox"] {
@@ -101,6 +102,40 @@
       grid-template-columns: 1fr 1fr;
       gap: 12px;
       margin-top: 8px;
+    }
+
+    #checkboxGroup {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+      background: #262629;
+      border-radius: 8px;
+      margin-top: 8px;
+    }
+
+    #checkboxGroup .checkbox-label {
+      font-size: 0.9rem;
+      color: #ddd;
+      margin: 0;
+    }
+
+    .mode-and-resolution {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .resolution-group {
+      min-height: 80px;
+      position: relative;
+    }
+
+    .resolution-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
     }
 
     #preview {
@@ -160,57 +195,63 @@
 </head>
 <body>
   <div class="container">
-    <h2>Braille Image Converter</h2>
+    <h2>Image to Braille</h2>
 
     <div id="drop">Drop an image here or click to upload</div>
 
     <div id="controls">
-      <label>
-        Mode:
-        <select id="mode">
-          <option value="custom">Custom</option>
-          <option value="twitch">Twitch</option>
-        </select>
-      </label>
-
-      <label class="inline-control">
-        Invert
-        <input type="checkbox" id="invert">
-      </label>
-
-      <div id="resolutionControls">
-        <label id="customWidthLabel">
-          Width (chars):
-          <input type="number" id="width" value="80">
+      <div class="mode-and-resolution">
+        <label>
+          Mode:
+          <select id="mode">
+            <option value="custom">Fixed Aspect Ratio</option>
+            <option value="twitch">Custom Resolution</option>
+          </select>
         </label>
-        <div id="twitchResolution" style="display: none;">
-          <label>Twitch Resolution:</label>
-          <div class="resolution-controls">
-            <input type="number" id="twitchWidth" value="28" placeholder="Width">
-            <input type="number" id="twitchHeight" value="16" placeholder="Height">
+
+        <div class="resolution-group">
+          <div id="fixedAspectResolution" class="resolution-content">
+            <label>
+              Width:
+              <input type="number" id="width" value="80">
+            </label>
           </div>
+          <div id="customResolution" class="resolution-content" style="display: none;">
+            <label>Custom Resolution:</label>
+            <div class="resolution-controls">
+              <input type="number" id="twitchWidth" value="28" placeholder="Width">
+              <input type="number" id="twitchHeight" value="16" placeholder="Height">
+            </div>
+          </div>
+        </div>
+
+        <div id="checkboxGroup">
+          <label class="inline-control checkbox-label">
+            Invert B&W
+            <input type="checkbox" id="invert">
+          </label>
+          <label class="inline-control checkbox-label">
+            Enable Dithering
+            <input type="checkbox" id="enableDither" checked>
+          </label>
+          <label class="inline-control checkbox-label">
+            Null Fix
+            <input type="checkbox" id="nullFix" checked>
+          </label>
         </div>
       </div>
 
-      <label id="aspectControl">
-        Aspect Ratio: <span id="aspectVal">1.75</span>
-        <input type="range" id="aspect" min="1.0" max="2.5" step="0.05" value="1.75">
-      </label>
+      <div>
+        <label id="ditherControl">
+          Dither Threshold: <span id="ditherVal">128</span>
+          <input type="range" id="dither" min="0" max="255" step="5" value="128">
+        </label>
 
-      <label class="inline-control">
-        Enable Dithering
-        <input type="checkbox" id="enableDither" checked>
-      </label>
-
-      <label id="ditherControl">
-        Dither Threshold: <span id="ditherVal">128</span>
-        <input type="range" id="dither" min="0" max="255" step="5" value="128">
-      </label>
-
-      <label class="inline-control">
-        Null Fix
-        <input type="checkbox" id="nullFix" checked>
-      </label>
+        <label id="aspectControl">
+          Stretch: <span id="aspectVal">1.75</span>
+          <input type="range" id="aspect" min="1.0" max="2.5" step="0.05" value="1.75">
+        </label>
+      </div>
     </div>
 
     <div id="preview"></div>
@@ -465,12 +506,12 @@
       if (!preview.textContent.trim()) return;
       
       if (mode === "twitch") {
-        // Fixed 12pt font for Twitch mode (like Twitch chat)
+        // Fixed 12pt font for Custom Resolution mode (like Twitch chat)
         preview.style.fontSize = "12pt";
         return;
       }
       
-      // Custom mode: scale to fit the container optimally
+      // Fixed Aspect Ratio mode: scale to fit the container optimally
       const containerWidth = preview.clientWidth - 32; // Account for padding
       const containerHeight = preview.clientHeight - 32;
       
@@ -506,12 +547,12 @@
       const mode = document.getElementById("mode").value;
       
       if (mode === "twitch") {
-        document.getElementById("customWidthLabel").style.display = "none";
-        document.getElementById("twitchResolution").style.display = "block";
+        document.getElementById("fixedAspectResolution").style.display = "none";
+        document.getElementById("customResolution").style.display = "block";
         document.getElementById("aspectControl").style.display = "none";
       } else {
-        document.getElementById("customWidthLabel").style.display = "flex";
-        document.getElementById("twitchResolution").style.display = "none";
+        document.getElementById("fixedAspectResolution").style.display = "block";
+        document.getElementById("customResolution").style.display = "none";
         document.getElementById("aspectControl").style.display = "flex";
       }
     }
