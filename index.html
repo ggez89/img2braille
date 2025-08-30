@@ -214,7 +214,7 @@
           <div id="setWidthResolution" class="resolution-content">
             <label>Width (chars):</label>
             <div class="resolution-controls">
-              <input type="number" id="width" value="60">
+              <input type="number" id="width" value="80">
               <input type="number" id="calculatedHeight" readonly style="background: #555; color: #aaa;" placeholder="Height (auto)">
             </div>
           </div>
@@ -222,7 +222,7 @@
             <label>Height (lines):</label>
             <div class="resolution-controls">
               <input type="number" id="calculatedWidth" readonly style="background: #555; color: #aaa;" placeholder="Width (auto)">
-              <input type="number" id="height" value="80">
+              <input type="number" id="height" value="60">
             </div>
           </div>
           <div id="customResolution" class="resolution-content" style="display: none;">
@@ -251,7 +251,7 @@
       </div>
 
       <div>
-        <label id="ditherControl" style="display: none;">
+        <label id="ditherControl">
           Dither Threshold: <span id="ditherVal">128</span>
           <input type="range" id="dither" min="0" max="255" step="5" value="128">
         </label>
@@ -280,8 +280,8 @@
     
     const defaultSettings = {
       mode: 'setwidth',
-      width: 60,
-      height: 80,
+      width: 80,
+      height: 60,
       twitchWidth: 28,
       twitchHeight: 16,
       invert: false,
@@ -635,35 +635,6 @@
 
     function updateModeVisibility() {
       const mode = document.getElementById("mode").value;
-      const previousMode = updateModeVisibility.previousMode || 'setwidth';
-      
-      // Preserve values between mode switches
-      if (previousMode !== mode) {
-        const width = parseInt(document.getElementById("width").value) || 60;
-        const height = parseInt(document.getElementById("height").value) || 80;
-        const twitchWidth = parseInt(document.getElementById("twitchWidth").value) || 28;
-        const twitchHeight = parseInt(document.getElementById("twitchHeight").value) || 16;
-        
-        if (mode === "custom") {
-          // Going to custom: preserve width and height from previous mode
-          if (previousMode === "setwidth") {
-            document.getElementById("twitchWidth").value = width;
-            document.getElementById("twitchHeight").value = height;
-          } else if (previousMode === "setheight") {
-            document.getElementById("twitchWidth").value = width;
-            document.getElementById("twitchHeight").value = height;
-          }
-        } else if (previousMode === "custom") {
-          // Coming from custom: preserve appropriate dimension
-          if (mode === "setwidth") {
-            document.getElementById("width").value = twitchWidth;
-          } else if (mode === "setheight") {
-            document.getElementById("height").value = twitchHeight;
-          }
-        }
-        // Between setwidth and setheight: preserve both dimensions
-        // (no action needed since they use the same width/height fields)
-      }
       
       if (mode === "custom") {
         document.getElementById("setWidthResolution").style.display = "none";
@@ -681,22 +652,28 @@
         document.getElementById("customResolution").style.display = "none";
         document.getElementById("aspectControl").style.display = "flex";
       }
-      
-      // Store current mode for next comparison
-      updateModeVisibility.previousMode = mode;
     }
 
     function updateDitherVisibility() {
       const enableDither = document.getElementById("enableDither").checked;
+      const ditherControl = document.getElementById("ditherControl");
+      const ditherSlider = document.getElementById("dither");
       
       if (enableDither) {
-        document.getElementById("ditherControl").style.display = "flex";
+        ditherControl.style.color = "#ddd";
+        ditherControl.style.opacity = "1";
+        ditherSlider.style.opacity = "1";
+        ditherSlider.disabled = false;
       } else {
-        document.getElementById("ditherControl").style.display = "none";
+        ditherControl.style.color = "#666";
+        ditherControl.style.opacity = "0.5";
+        ditherSlider.style.opacity = "0.5";
+        ditherSlider.disabled = true;
       }
     }
 
     function resetToDefaults() {
+      // Reset all form values to defaults
       document.getElementById("mode").value = defaultSettings.mode;
       document.getElementById("width").value = defaultSettings.width;
       document.getElementById("height").value = defaultSettings.height;
@@ -710,14 +687,22 @@
       document.getElementById("ditherVal").innerText = defaultSettings.dither;
       document.getElementById("nullFix").checked = defaultSettings.nullFix;
       
+      // Clear calculated fields
+      document.getElementById("calculatedHeight").value = "";
+      document.getElementById("calculatedWidth").value = "";
+      
+      // Update UI visibility
       updateModeVisibility();
       updateDitherVisibility();
       
+      // Clear localStorage
       if (typeof(Storage) !== "undefined") {
         localStorage.removeItem("aspect");
       }
       
+      // Clear preview and reset image
       document.getElementById("preview").textContent = "";
+      document.getElementById("preview").style.fontSize = ""; // Reset font size
       imgElement = null;
       currentFileName = null;
     }
