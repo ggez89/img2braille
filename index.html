@@ -204,17 +204,26 @@
         <label>
           Mode:
           <select id="mode">
-            <option value="custom">Fixed Aspect Ratio</option>
-            <option value="twitch">Custom Resolution</option>
+            <option value="setwidth">Set Width</option>
+            <option value="setheight">Set Height</option>
+            <option value="custom">Custom Resolution</option>
           </select>
         </label>
 
         <div class="resolution-group">
-          <div id="fixedAspectResolution" class="resolution-content">
-            <label>
-              Width:
-              <input type="number" id="width" value="80">
-            </label>
+          <div id="setWidthResolution" class="resolution-content">
+            <label>Width (chars):</label>
+            <div class="resolution-controls">
+              <input type="number" id="width" value="60">
+              <input type="number" id="calculatedHeight" readonly style="background: #555; color: #aaa;" placeholder="Height (auto)">
+            </div>
+          </div>
+          <div id="setHeightResolution" class="resolution-content" style="display: none;">
+            <label>Height (lines):</label>
+            <div class="resolution-controls">
+              <input type="number" id="calculatedWidth" readonly style="background: #555; color: #aaa;" placeholder="Width (auto)">
+              <input type="number" id="height" value="80">
+            </div>
           </div>
           <div id="customResolution" class="resolution-content" style="display: none;">
             <label>Custom Resolution:</label>
@@ -232,7 +241,7 @@
           </label>
           <label class="inline-control checkbox-label">
             Enable Dithering
-            <input type="checkbox" id="enableDither" checked>
+            <input type="checkbox" id="enableDither">
           </label>
           <label class="inline-control checkbox-label">
             Null Fix
@@ -242,14 +251,14 @@
       </div>
 
       <div>
-        <label id="ditherControl">
+        <label id="ditherControl" style="display: none;">
           Dither Threshold: <span id="ditherVal">128</span>
           <input type="range" id="dither" min="0" max="255" step="5" value="128">
         </label>
 
         <label id="aspectControl">
-          Stretch: <span id="aspectVal">1.75</span>
-          <input type="range" id="aspect" min="1.0" max="2.5" step="0.05" value="1.75">
+          Stretch: <span id="aspectVal">1.5</span>
+          <input type="range" id="aspect" min="1.0" max="2.0" step="0.05" value="1.5">
         </label>
       </div>
     </div>
@@ -270,13 +279,14 @@
     let currentFileName = null;
     
     const defaultSettings = {
-      mode: 'custom',
-      width: 80,
+      mode: 'setwidth',
+      width: 60,
+      height: 80,
       twitchWidth: 28,
       twitchHeight: 16,
       invert: false,
-      aspect: 1.75,
-      enableDither: true,
+      aspect: 1.5,
+      enableDither: false,
       dither: 128,
       nullFix: true
     };
@@ -353,12 +363,13 @@
 
     function imageToBraille(img, options = {}) {
       const {
-        mode = "custom",
+        mode = "setwidth",
         width_chars = 80,
+        height_lines = 20,
         twitch_width_chars = 28,
         twitch_height_lines = 16,
         invert = false,
-        aspect_correction = 1.75,
+        aspect_correction = 1.5,
         dithering_level = null,
         null_fix = false
       } = options;
@@ -368,13 +379,17 @@
       
       let target_w_px, target_h_px;
       
-      if (mode === "twitch") {
+      if (mode === "custom") {
         target_w_px = twitch_width_chars * braille_w;
         target_h_px = twitch_height_lines * braille_h;
-      } else {
+      } else if (mode === "setwidth") {
         target_w_px = width_chars * braille_w;
         const scale = target_w_px / img.naturalWidth;
         target_h_px = Math.round(img.naturalHeight * scale * aspect_correction);
+      } else if (mode === "setheight") {
+        target_h_px = height_lines * braille_h;
+        const scale = target_h_px / img.naturalHeight;
+        target_w_px = Math.round(img.naturalWidth * scale / aspect_correction);
       }
       
       // Convert image to grayscale
@@ -449,7 +464,7 @@
           let braille_char;
           if (braille_bits === 0) {
             if (null_fix) {
-              braille_char = '⠁';  // Braille with just dot 1 (U+2801)
+              braille_char = String.fromCharCode(0x2801);  // Braille with just dot 1 (U+2801)
             } else {
               braille_char = String.fromCharCode(0x2800);  // Empty braille character
             }
@@ -466,11 +481,42 @@
       return lines.join('\n');
     }
 
-    function render() {
+    function calculateDimensions() {
       if (!imgElement) return;
       
       const mode = document.getElementById("mode").value;
       const width = parseInt(document.getElementById("width").value);
+      const height = parseInt(document.getElementById("height").value);
+      const aspect = parseFloat(document.getElementById("aspect").value);
+      
+      const braille_w = 2;
+      const braille_h = 4;
+      
+      if (mode === "setwidth") {
+        // Calculate height from width
+        const target_w_px = width * braille_w;
+        const scale = target_w_px / imgElement.naturalWidth;
+        const target_h_px = Math.round(imgElement.naturalHeight * scale * aspect);
+        const calculatedHeight = Math.round(target_h_px / braille_h);
+        document.getElementById("calculatedHeight").value = calculatedHeight;
+      } else if (mode === "setheight") {
+        // Calculate width from height
+        const target_h_px = height * braille_h;
+        const scale = target_h_px / imgElement.naturalHeight;
+        const target_w_px = Math.round(imgElement.naturalWidth * scale / aspect);
+        const calculatedWidth = Math.round(target_w_px / braille_w);
+        document.getElementById("calculatedWidth").value = calculatedWidth;
+      }
+    }
+
+    function render() {
+      if (!imgElement) return;
+      
+      calculateDimensions();
+      
+      const mode = document.getElementById("mode").value;
+      const width = parseInt(document.getElementById("width").value);
+      const height = parseInt(document.getElementById("height").value);
       const twitchWidth = parseInt(document.getElementById("twitchWidth").value);
       const twitchHeight = parseInt(document.getElementById("twitchHeight").value);
       const invert = document.getElementById("invert").checked;
@@ -479,10 +525,40 @@
       const dither = enableDither ? parseInt(document.getElementById("dither").value) : null;
       const nullFix = document.getElementById("nullFix").checked;
 
+      // Validate inputs based on mode
+      let errorMessage = null;
+      
+      if (mode === "setwidth") {
+        if (!width || width <= 0 || isNaN(width)) {
+          errorMessage = "Please enter a width.";
+        }
+      } else if (mode === "setheight") {
+        if (!height || height <= 0 || isNaN(height)) {
+          errorMessage = "Please enter a height.";
+        }
+      } else if (mode === "custom") {
+        const widthValid = twitchWidth && twitchWidth > 0 && !isNaN(twitchWidth);
+        const heightValid = twitchHeight && twitchHeight > 0 && !isNaN(twitchHeight);
+        
+        if (!widthValid && !heightValid) {
+          errorMessage = "Please enter a width and height.";
+        } else if (!widthValid) {
+          errorMessage = "Please enter a width.";
+        } else if (!heightValid) {
+          errorMessage = "Please enter a height.";
+        }
+      }
+      
+      if (errorMessage) {
+        document.getElementById("preview").textContent = errorMessage;
+        return;
+      }
+
       try {
         const braille = imageToBraille(imgElement, {
           mode,
           width_chars: width,
+          height_lines: height,
           twitch_width_chars: twitchWidth,
           twitch_height_lines: twitchHeight,
           invert,
@@ -505,22 +581,36 @@
       
       if (!preview.textContent.trim()) return;
       
-      if (mode === "twitch") {
-        // Fixed 12pt font for Custom Resolution mode (like Twitch chat)
-        preview.style.fontSize = "12pt";
-        return;
-      }
-      
-      // Fixed Aspect Ratio mode: scale to fit the container optimally
-      const containerWidth = preview.clientWidth - 32; // Account for padding
-      const containerHeight = preview.clientHeight - 32;
-      
       // Get the braille text dimensions
-      const lines = preview.textContent.split('\n');
+      const lines = preview.textContent.split('\n').filter(line => line.trim());
+      if (lines.length === 0) return;
+      
       const maxLineLength = Math.max(...lines.map(line => line.length));
       const lineCount = lines.length;
       
       if (maxLineLength === 0 || lineCount === 0) return;
+      
+      if (mode === "custom") {
+        // For custom resolution mode, use a more conservative fixed size approach
+        // that still scales based on container size but stays readable
+        const containerWidth = preview.clientWidth - 32;
+        const containerHeight = preview.clientHeight - 32;
+        
+        // Calculate based on container size but with reasonable bounds
+        const charWidthRatio = 0.6;
+        const fontSizeForWidth = (containerWidth / maxLineLength) / charWidthRatio;
+        const fontSizeForHeight = containerHeight / lineCount;
+        
+        let fontSize = Math.min(fontSizeForWidth, fontSizeForHeight);
+        fontSize = Math.max(10, Math.min(16, fontSize)); // Tighter bounds for custom mode
+        
+        preview.style.fontSize = Math.floor(fontSize) + "px";
+        return;
+      }
+      
+      // Set Width/Set Height modes: scale to fit the container optimally
+      const containerWidth = preview.clientWidth - 32; // Account for padding
+      const containerHeight = preview.clientHeight - 32;
       
       // Calculate optimal font size based on available space
       // Braille characters are roughly 0.6 times as wide as they are tall
@@ -545,16 +635,55 @@
 
     function updateModeVisibility() {
       const mode = document.getElementById("mode").value;
+      const previousMode = updateModeVisibility.previousMode || 'setwidth';
       
-      if (mode === "twitch") {
-        document.getElementById("fixedAspectResolution").style.display = "none";
+      // Preserve values between mode switches
+      if (previousMode !== mode) {
+        const width = parseInt(document.getElementById("width").value) || 60;
+        const height = parseInt(document.getElementById("height").value) || 80;
+        const twitchWidth = parseInt(document.getElementById("twitchWidth").value) || 28;
+        const twitchHeight = parseInt(document.getElementById("twitchHeight").value) || 16;
+        
+        if (mode === "custom") {
+          // Going to custom: preserve width and height from previous mode
+          if (previousMode === "setwidth") {
+            document.getElementById("twitchWidth").value = width;
+            document.getElementById("twitchHeight").value = height;
+          } else if (previousMode === "setheight") {
+            document.getElementById("twitchWidth").value = width;
+            document.getElementById("twitchHeight").value = height;
+          }
+        } else if (previousMode === "custom") {
+          // Coming from custom: preserve appropriate dimension
+          if (mode === "setwidth") {
+            document.getElementById("width").value = twitchWidth;
+          } else if (mode === "setheight") {
+            document.getElementById("height").value = twitchHeight;
+          }
+        }
+        // Between setwidth and setheight: preserve both dimensions
+        // (no action needed since they use the same width/height fields)
+      }
+      
+      if (mode === "custom") {
+        document.getElementById("setWidthResolution").style.display = "none";
+        document.getElementById("setHeightResolution").style.display = "none";
         document.getElementById("customResolution").style.display = "block";
         document.getElementById("aspectControl").style.display = "none";
-      } else {
-        document.getElementById("fixedAspectResolution").style.display = "block";
+      } else if (mode === "setwidth") {
+        document.getElementById("setWidthResolution").style.display = "block";
+        document.getElementById("setHeightResolution").style.display = "none";
+        document.getElementById("customResolution").style.display = "none";
+        document.getElementById("aspectControl").style.display = "flex";
+      } else if (mode === "setheight") {
+        document.getElementById("setWidthResolution").style.display = "none";
+        document.getElementById("setHeightResolution").style.display = "block";
         document.getElementById("customResolution").style.display = "none";
         document.getElementById("aspectControl").style.display = "flex";
       }
+      
+      // Store current mode for next comparison
+      updateModeVisibility.previousMode = mode;
     }
 
     function updateDitherVisibility() {
@@ -570,6 +699,7 @@
     function resetToDefaults() {
       document.getElementById("mode").value = defaultSettings.mode;
       document.getElementById("width").value = defaultSettings.width;
+      document.getElementById("height").value = defaultSettings.height;
       document.getElementById("twitchWidth").value = defaultSettings.twitchWidth;
       document.getElementById("twitchHeight").value = defaultSettings.twitchHeight;
       document.getElementById("invert").checked = defaultSettings.invert;
@@ -665,6 +795,7 @@
       });
 
       document.getElementById("width").addEventListener('input', render);
+      document.getElementById("height").addEventListener('input', render);
       document.getElementById("twitchWidth").addEventListener('input', render);
       document.getElementById("twitchHeight").addEventListener('input', render);
       document.getElementById("invert").addEventListener('change', render);
